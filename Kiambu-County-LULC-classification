@@ -1,0 +1,114 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var kiambu = ee.FeatureCollection("projects/ee-thukupeter487landsatproject/assets/Kiambu"),
+    s2 = ee.ImageCollection("COPERNICUS/S2_SR"),
+    urban = ee.FeatureCollection("users/ujavalgandhi/e2e/urban_gcps"),
+    bare = ee.FeatureCollection("users/ujavalgandhi/e2e/bare_gcps"),
+    water = ee.FeatureCollection("users/ujavalgandhi/e2e/water_gcps"),
+    vegetation = ee.FeatureCollection("users/ujavalgandhi/e2e/vegetation_gcps"),
+    imageVisParam = {"opacity":0.01,"gamma":0.1},
+    Bare = 
+    /* color: #0b4a8b */
+    /* shown: false */
+    ee.Feature(
+        ee.Geometry.MultiPoint(
+            [[36.942901661503626, -1.1672546818806937],
+             [36.93655019055636, -1.1454581270038453],
+             [36.94157128583224, -1.1482041588586709],
+             [36.92826752911837, -1.146874050007999],
+             [36.91650872479708, -1.1500491475300112],
+             [36.9146204496506, -1.1582872219022613]]),
+        {
+          "landcover": 1,
+          "system:index": "0"
+        }),
+    Water = 
+    /* color: #ff0000 */
+    /* shown: false */
+    ee.Feature(
+        ee.Geometry.MultiPoint(
+            [[36.75428776843649, -1.0476422305388295],
+             [36.752184916568815, -1.0495730976117594],
+             [36.75008206470114, -1.0491440161429413]]),
+        {
+          "landcover": 2,
+          "system:index": "0"
+        }),
+    Vegetation = 
+    /* color: #00ff00 */
+    /* shown: false */
+    ee.Feature(
+        ee.Geometry.MultiPoint(
+            [[36.69680266482931, -1.0460117196393772],
+             [36.69508605105978, -1.0459688114463632],
+             [36.696030188633024, -1.04689133746677],
+             [36.697982836795866, -1.0462691687851198]]),
+        {
+          "landcover": 3,
+          "system:index": "0"
+        }),
+    Urban = 
+    /* color: #999900 */
+    /* shown: false */
+    ee.Feature(
+        ee.Geometry.MultiPoint(
+            [[36.80666835426317, -1.152836271132666],
+             [36.80430801033006, -1.1538821207164884],
+             [36.807725144615034, -1.153469144260082],
+             [36.807194067230085, -1.15398938731874],
+             [36.807977272262434, -1.1537212208055414],
+             [36.81050927757249, -1.153892847376902],
+             [36.804831041087965, -1.1544533153268748]]),
+        {
+          "landcover": 0,
+          "system:index": "0"
+        });
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
+Map.addLayer(kiambu)
+// The following collections were created using the 
+// Drawing Tools in the code editor 
+
+
+
+
+
+var filtered = s2
+.filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30))
+  .filter(ee.Filter.date('2018-01-01', '2020-01-01'))
+  .filter(ee.Filter.bounds(kiambu))
+  .select('B.*');
+  var composite = filtered.median().clip(kiambu);
+
+// Display the input composite.
+var rgbVis = {
+  min: 0.0,
+  max: 3000,
+  bands: ['B4', 'B3', 'B2'],
+};
+Map.addLayer(composite, rgbVis, 'image');
+
+var gcps = urban.merge(bare).merge(Water).merge(vegetation);
+
+// Overlay the point on the image to get training data.
+var training = composite.sampleRegions({
+  collection: gcps, 
+  properties: ['landcover'], 
+  scale: 10
+});
+var gcps = urban.merge(Bare).merge(Water).merge(Vegetation);
+var training = composite.sampleRegions({
+  collection: gcps, 
+  properties: ['landcover'], 
+  scale: 10,
+ tileScale: 16
+});
+print(training);
+
+// Train a classifier.
+var classifier = ee.Classifier.smileRandomForest(50).train({
+ features: training,  
+ classProperty: 'landcover', 
+  inputProperties: composite.bandNames()
+});
+// // // Classify the image.
+var classified = composite.classify(classifier);
+Map.addLayer(classified, {min: 0, max: 3, palette: ['yellow', 'brown', 'blue', 'green']},'2019');
